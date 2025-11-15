@@ -20,4 +20,4 @@ COPY . .
 EXPOSE 3000
 
 # Comando para ejecutar la aplicación (para producción es mejor "npm start")
-CMD ["npm", "run", "dev"]
+CMD ["npm", "start"]
