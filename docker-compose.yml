@@ -24,7 +24,7 @@ services:
     depends_on:
       - postgres_db
     environment:
-      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres_db:5432/properties_dev?schema=public"
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@postgres_db:5432/${DB_NAME}?schema=public"
     volumes:
       - ./backend:/usr/src/app
       - /usr/src/app/node_modules
