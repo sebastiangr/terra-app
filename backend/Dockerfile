@@ -7,14 +7,11 @@ WORKDIR /usr/src/app
 # Copia los archivos de dependencias
 COPY package*.json ./
 
+# Copia la carpeta de Prisma ANTES de ejecutar el comando generate
+COPY prisma ./prisma/
+
 # Instala las dependencias
 RUN npm install
-
-# Copia la carpeta de Prisma ANTES de ejecutar el comando generate
-COPY prisma ./prisma
-
-# Ahora sí, genera el cliente de Prisma
-RUN npx prisma generate
 
 # Copia el resto del código de la aplicación
 COPY . .
