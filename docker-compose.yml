@@ -1,0 +1,34 @@
+services:
+  # Servicio de la Base de Datos PostgreSQL
+  postgres_db:
+    image: postgres:15-alpine
+    container_name: terra_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data 
+    ports:
+      - '5450:5432' 
+
+  # Servicio del Backend (Node.js + Express)
+  backend:
+    container_name: terra_backend
+    build:
+      context: ./backend 
+    restart: always
+    ports:
+      - '3500:3000'
+    depends_on:
+      - postgres_db
+    environment:
+      DATABASE_URL: "postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/properties_dev?schema=public"
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
+
+volumes:
+  postgres_data:
+  caddy_data:
