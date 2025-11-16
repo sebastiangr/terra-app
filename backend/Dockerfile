@@ -1,23 +1,25 @@
-# backend/Dockerfile
+# --- Etapa Única: Producción ---
+# Usamos una imagen base limpia.
 FROM node:20-alpine
-
-# Directorio de trabajo en el contenedor
 WORKDIR /usr/src/app
 
-# Copia los archivos de dependencias
+# Copia los archivos de manifiesto
 COPY package*.json ./
 
-# Copia la carpeta de Prisma ANTES de ejecutar el comando generate
+# Copia el schema de Prisma ANTES de instalar.
 COPY prisma ./prisma/
 
-# Instala las dependencias
-RUN npm install
+# ¡CLAVE! Instalamos solo las dependencias de producción.
+# Prisma CLI ahora está incluido aquí gracias al paso anterior.
+# El script "postinstall" que añadimos antes se ejecutará aquí
+# y generará el cliente correctamente.
+RUN npm install --only=production
 
-# Copia el resto del código de la aplicación
-COPY . .
+# Copia el código fuente de la aplicación.
+COPY src ./src/
 
-# Expone el puerto que la aplicación usará
+# EXPOSE no cambia.
 EXPOSE 3000
 
-# Comando para ejecutar la aplicación (para producción es mejor "npm start")
-CMD ["npm", "start"]
+# El CMD apunta al archivo de inicio.
+CMD ["node", "src/index.js"]
