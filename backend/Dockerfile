@@ -1,29 +1,32 @@
-# --- Etapa Única: Producción ---
-# Usamos una imagen base limpia.
-FROM node:20-alpine
+# backend/Dockerfile (VERSIÓN DE RESET)
+
+# --- Etapa 1: Instalación de Dependencias ---
+# ¡CAMBIO CLAVE! Usamos la imagen estándar basada en Debian, no Alpine.
+# Es más grande pero infinitamente más compatible.
+FROM node:20 AS deps
+
 WORKDIR /usr/src/app
 
-# Copia los archivos de manifiesto
 COPY package*.json ./
-
-# Copia el schema de Prisma ANTES de instalar.
 COPY prisma ./prisma/
 
-# ¡CLAVE! Instalamos solo las dependencias de producción.
-# Prisma CLI ahora está incluido aquí gracias al paso anterior.
-# El script "postinstall" que añadimos antes se ejecutará aquí
-# y generará el cliente correctamente.
-RUN npm install --only=production
+# Instala TODAS las dependencias. Esto nos da acceso a la CLI de Prisma.
+RUN npm install
 
-# Ejecutamos explícitamente la generación del cliente de Prisma.
-# Esto se hace DENTRO del contenedor, usando los binarios correctos para ARM.
-RUN npx prisma generate
+# --- Etapa 2: Producción ---
+FROM node:20 AS production
 
-# Copia el código fuente de la aplicación.
+WORKDIR /usr/src/app
+
+# Copia las dependencias y el cliente de Prisma ya generado desde la etapa anterior.
+# Esto es más rápido y fiable que volver a instalar.
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+COPY --from=deps /usr/src/app/package*.json ./
+COPY --from=deps /usr/src/app/prisma ./prisma/
+
+# Copia tu código fuente
 COPY src ./src/
 
-# EXPOSE no cambia.
 EXPOSE 3000
 
-# El CMD apunta al archivo de inicio.
 CMD ["node", "src/index.js"]
