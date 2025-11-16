@@ -1,32 +1,31 @@
-# backend/Dockerfile (VERSIÓN DE RESET)
+# backend/Dockerfile (MODO INVESTIGACIÓN)
 
-# --- Etapa 1: Instalación de Dependencias ---
-# ¡CAMBIO CLAVE! Usamos la imagen estándar basada en Debian, no Alpine.
-# Es más grande pero infinitamente más compatible.
-FROM node:20 AS deps
+FROM node:20
 
 WORKDIR /usr/src/app
 
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Instala TODAS las dependencias. Esto nos da acceso a la CLI de Prisma.
+# --- PRUEBA 1: ¿Existen los archivos antes de instalar? ---
+RUN echo ">>> CONTENIDO ANTES DE NPM INSTALL:"
+RUN ls -laR
+
 RUN npm install
 
-# --- Etapa 2: Producción ---
-FROM node:20 AS production
+# --- PRUEBA 2: ¿Qué hay después de instalar? ---
+RUN echo ">>> CONTENIDO DESPUÉS DE NPM INSTALL (Y POSTINSTALL):"
+RUN ls -laR
 
-WORKDIR /usr/src/app
+# --- PRUEBA 3: Vamos a ver específicamente qué generó Prisma ---
+RUN echo ">>> CONTENIDO DE NODE_MODULES/.PRISMA/CLIENT:"
+RUN ls -la node_modules/.prisma/client || echo "Directorio .prisma/client NO ENCONTRADO"
 
-# Copia las dependencias y el cliente de Prisma ya generado desde la etapa anterior.
-# Esto es más rápido y fiable que volver a instalar.
-COPY --from=deps /usr/src/app/node_modules ./node_modules
-COPY --from=deps /usr/src/app/package*.json ./
-COPY --from=deps /usr/src/app/prisma ./prisma/
 
-# Copia tu código fuente
 COPY src ./src/
 
 EXPOSE 3000
 
-CMD ["node", "src/index.js"]
+# Por ahora, no queremos que el contenedor crashee.
+# Lo mantendremos vivo para poder entrar a investigar.
+CMD ["tail", "-f", "/dev/null"]
