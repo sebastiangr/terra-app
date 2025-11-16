@@ -15,6 +15,10 @@ COPY prisma ./prisma/
 # y generará el cliente correctamente.
 RUN npm install --only=production
 
+# Ejecutamos explícitamente la generación del cliente de Prisma.
+# Esto se hace DENTRO del contenedor, usando los binarios correctos para ARM.
+RUN npx prisma generate
+
 # Copia el código fuente de la aplicación.
 COPY src ./src/
 
