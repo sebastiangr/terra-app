@@ -1,7 +1,7 @@
 const { google } = require("@google/genai");
 
 // Inicializar Gemini
-const genAI = new google.GenAI({ apiKey: process.env.GEMINI_API_KEY });
+const genai = new google.GenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 async function analyzeProperty(rawText, url) {
   
