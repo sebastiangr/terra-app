@@ -12,6 +12,11 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U terra_user -d terra_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5      
     networks:
       - terra_net
 
@@ -26,7 +31,8 @@ services:
       - DATABASE_URL=postgresql://terra_user:${DB_PASSWORD}@db:5432/terra_db
       - GEMINI_API_KEY=${GEMINI_API_KEY} # La añadiremos luego
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - terra_net
 
