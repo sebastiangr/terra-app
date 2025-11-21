@@ -1,62 +1,80 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { google } = require("@google/genai");
 
 // Inicializar Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new google.GenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 async function analyzeProperty(rawText, url) {
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  
+  if (!rawText || rawText.length < 200) {
+    console.warn("⚠️ Texto insuficiente para análisis.");
+    throw new Error("Contenido insuficiente (Posible Captcha o página vacía).");
+  }
 
   const prompt = `
-  Actúa como un experto analista inmobiliario y extractor de datos.
-  Analiza el siguiente texto extraído de un sitio web de bienes raíces (puede contener menús y basura, ignóralo).
-  
-  URL de origen: ${url}
-  
-  TEXTO A ANALIZAR:
-  """
-  ${rawText}
-  """
+    Eres un experto en Real Estate. Analiza este texto crudo de una web inmobiliaria.
+    
+    URL: ${url}
+    TEXTO: """${rawText}"""
 
-  TU TAREA:
-  Extrae la información y devuélvela SOLAMENTE en formato JSON válido (sin bloques de código markdown).
-  Usa exactamente esta estructura. Si no encuentras un dato, pon null o 0.
-  
-  Estructura JSON requerida:
-  {
-      "title": "Título corto y descriptivo del anuncio",
-      "description": "Resumen breve de la descripción (max 300 caracteres)",
-      "price": 0, (Solo el número, convierte a COP si está en otra moneda o asume COP si no se dice. Si es 0 o 'consultar', pon null),
-      "currency": "COP",
-      "location": "Ciudad/Municipio y Barrio si aplica",
-      "type": "Casa | Apartamento | Terreno | Finca | Otro",
+    INSTRUCCIONES:
+    1. Extrae datos clave.
+    2. Precio: solo números (null si no hay). Moneda: normalizar a COP si es Colombia.
+    3. Sentiment: análisis crítico de la oportunidad.
+    
+    SCHEMA JSON ESTRICTO:
+    {
+      "title": "string",
+      "description": "string",
+      "price": number | null,
+      "currency": "string",
+      "location": "string",
+      "type": "string",
       "features": {
-          "bedrooms": 0,
-          "bathrooms": 0,
-          "area_total_m2": 0,
-          "area_constructed_m2": 0,
-          "parking": false,
-          "stratum": 0 (estrato socioeconómico si aplica, sino null)
+        "bedrooms": number | null,
+        "bathrooms": number | null,
+        "area_total_m2": number | null,
+        "parking": boolean
       },
       "sentiment": {
-          "pros": ["pro1", "pro2"], (Lo bueno según la descripción)
-          "cons": ["con1", "con2"], (Lo malo o faltante)
-          "score": 0 (Califica del 1 al 10 la oportunidad según precio/características)
+        "pros": ["string"],
+        "cons": ["string"],
+        "score": number
       }
-  }
+    }
   `;
 
   try {
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text();
 
-    // Limpieza: A veces Gemini devuelve ```json ... ```
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const { data } = await genai.models.generateContent({
+      model: 'gemini-2.5-flash', 
+      config: {
+        responseMimeType: 'application/json',
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: prompt }]
+        }
+      ],
+    });
 
-    return JSON.parse(text);
+    // El nuevo SDK suele devolver el objeto ya parseado en data.parsed
+    // o el texto crudo en data.text si no se usó un Schema tipado.
+    // Con responseMimeType JSON, data.text es un string JSON.
+    
+    // Verificamos si el SDK ya lo parseó automáticamente (feature 2025)
+    if (data.parsed) {
+      return data.parsed;
+    }
+        
+    // Si no, parseamos el texto
+    const jsonString = data.text || (data.candidates && data.candidates[0].content.parts[0].text);
+    return JSON.parse(jsonString);
+
   } catch (error) {
-    console.error("❌ Error en Gemini:", error);
-    throw new Error("Falló el análisis de IA");
+    console.error("❌ Error SDK GenAI:", error);
+    // Fallback útil: si 2.5 no está disponible en tu región, sugerir revisar la key
+    throw new Error(`Fallo IA: ${error.message}`);
   }
 }
 
