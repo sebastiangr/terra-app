@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: terra_db
+    restart: always
+    ports:
+      - "5450:5432"
+    environment:
+      POSTGRES_USER: terra_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: terra_db
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - terra_net
+
+  api:
+    build: ./backend
+    container_name: terra_api
+    restart: always
+    ports:
+      - "3500:3000" # Expuesto localmente para que Caddy lo vea
+    environment:
+      - PORT=3000
+      - DATABASE_URL=postgresql://terra_user:${DB_PASSWORD}@db:5432/terra_db
+      - GEMINI_API_KEY=${GEMINI_API_KEY} # La añadiremos luego
+    depends_on:
+      - db
+    networks:
+      - terra_net
+
+volumes:
+  pg_data:
+
+networks:
+  terra_net:
