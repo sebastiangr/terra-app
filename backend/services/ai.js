@@ -1,7 +1,7 @@
-const { google } = require("@google/genai");
+const { GoogleGenAI } = require("@google/genai");
 
 // Inicializar Gemini
-const genai = new google.GenAI({ apiKey: process.env.GEMINI_API_KEY });
+const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 async function analyzeProperty(rawText, url) {
   
@@ -45,7 +45,7 @@ async function analyzeProperty(rawText, url) {
 
   try {
 
-    const { data } = await genai.models.generateContent({
+    const response = await genai.models.generateContent({
       model: 'gemini-2.5-flash', 
       config: {
         responseMimeType: 'application/json',
@@ -58,22 +58,15 @@ async function analyzeProperty(rawText, url) {
       ],
     });
 
-    // El nuevo SDK suele devolver el objeto ya parseado en data.parsed
-    // o el texto crudo en data.text si no se usó un Schema tipado.
-    // Con responseMimeType JSON, data.text es un string JSON.
+    const jsonText = response.text();
     
-    // Verificamos si el SDK ya lo parseó automáticamente (feature 2025)
-    if (data.parsed) {
-      return data.parsed;
+    if (!jsonText) {
+      throw new Error("Respuesta vacía de Gemini");
     }
-        
-    // Si no, parseamos el texto
-    const jsonString = data.text || (data.candidates && data.candidates[0].content.parts[0].text);
-    return JSON.parse(jsonString);
 
+    return JSON.parse(jsonText);
   } catch (error) {
     console.error("❌ Error SDK GenAI:", error);
-    // Fallback útil: si 2.5 no está disponible en tu región, sugerir revisar la key
     throw new Error(`Fallo IA: ${error.message}`);
   }
 }
