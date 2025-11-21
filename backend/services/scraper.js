@@ -1,93 +1,80 @@
-// backend/services/scraper.js
-const puppeteer = require('puppeteer-extra'); // <--- Usamos la versión Extra
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const axios = require('axios');
+const cheerio = require('cheerio');
 
-// Activamos el modo sigilo (oculta que es un bot)
-puppeteer.use(StealthPlugin());
-
-async function scrapeUrl(rawUrl) {
-  // 1. Limpieza de URL (Vital para MercadoLibre)
-  // Quitamos tracking de Facebook (?utm_...) que suele forzar el login
-  const url = rawUrl.split('?')[0]; 
-  
-  console.log(`🕷️ Iniciando scraping Stealth en: ${url}`);
-  
-  const browser = await puppeteer.launch({
-    headless: "new", 
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--window-size=1920,1080',
-    ]
-  });
+async function scrapeUrl(url) {
+  console.log(`⚡ Scraper Ligero: Procesando ${url}`);
 
   try {
-    const page = await browser.newPage();
-    
-    // 2. Configuración Humana
-    await page.setViewport({ width: 1920, height: 1080 });
-    
-    // Header de idioma aceptado (importante para evitar redirecciones raras)
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+    // Hacemos la petición fingiendo ser un bot de previsualización (como Facebook o Discord)
+    // Esto suele evitar redirecciones al Login.
+    const { data } = await axios.get(url, {
+        headers: {
+            'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8'
+        },
+        timeout: 10000 // 10 segundos máximo
     });
 
-    // 3. Navegación "Lenta pero Segura"
-    // Quitamos el bloqueo de recursos. ML detecta si no cargas CSS/Fuentes.
-    await page.goto(url, { 
-      waitUntil: 'networkidle2', // Esperamos a que termine de cargar todo
-      timeout: 60000 
+    const $ = cheerio.load(data);
+    const metadata = {};
+
+    // 1. Extracción OpenGraph (Estándar en FB y ML)
+    metadata.title = $('meta[property="og:title"]').attr('content') || $('title').text();
+    metadata.description = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content');
+    metadata.image = $('meta[property="og:image"]').attr('content');
+    metadata.url = $('meta[property="og:url"]').attr('content') || url;
+    metadata.site_name = $('meta[property="og:site_name"]').attr('content');
+
+    // 2. Extracción JSON-LD (Muy común en MercadoLibre para precio)
+    // Buscamos scripts tipo application/ld+json
+    let jsonLdData = {};
+    $('script[type="application/ld+json"]').each((i, el) => {
+      try {
+        const json = JSON.parse($(el).html());
+        // A veces viene como array o como grafo
+        const item = Array.isArray(json) ? json[0] : json;
+        
+        // Si encontramos algo que parece un producto u oferta
+        if (item['@type'] === 'Product' || item['@type'] === 'Offer' || item['offers']) {
+          jsonLdData = item;
+        }
+      } catch (e) { /* Ignorar JSON malformados */ }
     });
 
-    // 4. Validación de éxito (Detectar si nos mandó al login)
-    const title = await page.title();
-    if (title.includes("Ingresa") || title.includes("Login") || title.includes("Robot")) {
-      throw new Error("MercadoLibre detectó el bot y pidió Login.");
+    // Intentar sacar precio del JSON-LD si existe
+    let rawPrice = null;
+    let currency = null;
+
+    if (jsonLdData.offers) {
+      const offer = Array.isArray(jsonLdData.offers) ? jsonLdData.offers[0] : jsonLdData.offers;
+      rawPrice = offer.price;
+      currency = offer.priceCurrency;
     }
 
-    // 5. Scroll humano (Cargar lazy images)
-    await page.evaluate(async () => {
-      await new Promise((resolve) => {
-        let totalHeight = 0;
-        const distance = 100;
-        const timer = setInterval(() => {
-          const scrollHeight = document.body.scrollHeight;
-          window.scrollBy(0, distance);
-          totalHeight += distance;
+    // Consolidamos el texto para la IA
+    // Le damos título, descripción y precio si lo hallamos.
+    const textForAI = `
+    Título: ${metadata.title}
+    Descripción: ${metadata.description}
+    Sitio: ${metadata.site_name}
+    Precio Detectado en Metadata: ${rawPrice ? rawPrice + ' ' + currency : 'No detectado explícitamente'}
+    `;
 
-          if (totalHeight >= scrollHeight - window.innerHeight || totalHeight > 3000) {
-            clearInterval(timer);
-            resolve();
-          }
-        }, 100);
-      });
-    });
-
-    // 6. Extracción
-    const data = await page.evaluate(() => {
-      // Selectores específicos de ML para la imagen (backup)
-      const ogImage = document.querySelector('meta[property="og:image"]')?.content || 
-                      document.querySelector('img.ui-pdp-gallery__figure__image')?.src;
-      
-      const rawText = document.body.innerText;
-
-      return {
-        image: ogImage || null,
-        // Cortamos un poco menos para asegurar que entre la info técnica
-        text: rawText.replace(/\s+/g, ' ').substring(0, 25000)
-      };
-    });
-
-    return data;
+    return {
+      image: metadata.image || null,
+      text: textForAI.trim(),
+      rawMetadata: metadata // Para debug si quieres
+    };
 
   } catch (error) {
-    console.error("❌ Error en Scraper:", error);
-    throw new Error(`Scraping fallido: ${error.message}`);
-  } finally {
-    await browser.close();
+    console.error("❌ Error Axios/Cheerio:", error.message);
+    // Si falla (403/404), devolvemos nulls para que el usuario llene todo manual
+    return {
+      image: null,
+      text: "No se pudo acceder a la URL automáticamente. Ingreso manual requerido.",
+      error: true
+    };
   }
 }
 
