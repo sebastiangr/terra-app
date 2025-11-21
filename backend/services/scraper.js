@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 
 async function scrapeUrl(url) {
-  console.log(`🕷️ Iniciando scraping de: ${url}`);
+  console.log(`🕷️ Iniciando scraping optimizado de: ${url}`);
   
   const browser = await puppeteer.launch({
     headless: "new",
@@ -10,32 +10,49 @@ async function scrapeUrl(url) {
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
-      '--disable-gpu'
+      '--disable-gpu',
+      '--disable-features=IsolateOrigins,site-per-process', // Ahorra memoria
+      '--blink-settings=imagesEnabled=false' // Deshabilita imágenes a nivel motor
     ]
   });
 
   try {
     const page = await browser.newPage();
-        
-    // Truco: Fingir ser un navegador real de escritorio
+    
+    // 1. Optimización: Interceptar requests para bloquear basura
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const resourceType = req.resourceType();
+      if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+
+    // User Agent realista
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36');
-    await page.setViewport({ width: 1366, height: 768 });
+    await page.setViewport({ width: 1280, height: 800 });
 
-    // Ir a la URL y esperar a que la red se calme (max 30s)
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+    // 2. Optimización: Timeout más largo y esperar solo al DOM
+    await page.goto(url, { 
+      waitUntil: 'domcontentloaded', // Mucho más rápido que networkidle2
+      timeout: 60000 // 60 segundos por si el VPS es lento
+    });
 
-    // Lógica de extracción
+    // Pequeña espera extra para asegurar que algún JS crítico cargue (opcional)
+    // await new Promise(r => setTimeout(r, 2000));
+
     const data = await page.evaluate(() => {
-      // 1. Intentar sacar la imagen principal (Meta tags suelen ser más fiables que clases CSS ofuscadas)
-      const ogImage = document.querySelector('meta[property="og:image"]')?.content;
+      // Intentamos sacar la imagen del OpenGraph (meta tags) ya que bloqueamos la carga visual
+      const ogImage = document.querySelector('meta[property="og:image"]')?.content || 
+                      document.querySelector('meta[name="twitter:image"]')?.content;
       
-      // 2. Sacar todo el texto visible del cuerpo
       const rawText = document.body.innerText;
 
-      // 3. Limpieza básica (quitar saltos de línea excesivos)
       return {
         image: ogImage || null,
-        text: rawText.replace(/\s+/g, ' ').substring(0, 15000) // Limitar caracteres para no saturar a Gemini
+        text: rawText.replace(/\s+/g, ' ').substring(0, 20000)
       };
     });
 
