@@ -1,58 +1,83 @@
-const puppeteer = require('puppeteer');
+// backend/services/scraper.js
+const puppeteer = require('puppeteer-extra'); // <--- Usamos la versión Extra
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
-async function scrapeUrl(url) {
-  console.log(`🕷️ Iniciando scraping optimizado de: ${url}`);
+// Activamos el modo sigilo (oculta que es un bot)
+puppeteer.use(StealthPlugin());
+
+async function scrapeUrl(rawUrl) {
+  // 1. Limpieza de URL (Vital para MercadoLibre)
+  // Quitamos tracking de Facebook (?utm_...) que suele forzar el login
+  const url = rawUrl.split('?')[0]; 
+  
+  console.log(`🕷️ Iniciando scraping Stealth en: ${url}`);
   
   const browser = await puppeteer.launch({
-    headless: "new",
+    headless: "new", 
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
-      '--disable-features=IsolateOrigins,site-per-process', // Ahorra memoria
-      '--blink-settings=imagesEnabled=false' // Deshabilita imágenes a nivel motor
+      '--window-size=1920,1080',
     ]
   });
 
   try {
     const page = await browser.newPage();
     
-    // 1. Optimización: Interceptar requests para bloquear basura
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      const resourceType = req.resourceType();
-      if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
-        req.abort();
-      } else {
-        req.continue();
-      }
+    // 2. Configuración Humana
+    await page.setViewport({ width: 1920, height: 1080 });
+    
+    // Header de idioma aceptado (importante para evitar redirecciones raras)
+    await page.setExtraHTTPHeaders({
+      'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
     });
 
-    // User Agent realista
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36');
-    await page.setViewport({ width: 1280, height: 800 });
-
-    // 2. Optimización: Timeout más largo y esperar solo al DOM
+    // 3. Navegación "Lenta pero Segura"
+    // Quitamos el bloqueo de recursos. ML detecta si no cargas CSS/Fuentes.
     await page.goto(url, { 
-      waitUntil: 'domcontentloaded', // Mucho más rápido que networkidle2
-      timeout: 60000 // 60 segundos por si el VPS es lento
+      waitUntil: 'networkidle2', // Esperamos a que termine de cargar todo
+      timeout: 60000 
     });
 
-    // Pequeña espera extra para asegurar que algún JS crítico cargue (opcional)
-    // await new Promise(r => setTimeout(r, 2000));
+    // 4. Validación de éxito (Detectar si nos mandó al login)
+    const title = await page.title();
+    if (title.includes("Ingresa") || title.includes("Login") || title.includes("Robot")) {
+      throw new Error("MercadoLibre detectó el bot y pidió Login.");
+    }
 
+    // 5. Scroll humano (Cargar lazy images)
+    await page.evaluate(async () => {
+      await new Promise((resolve) => {
+        let totalHeight = 0;
+        const distance = 100;
+        const timer = setInterval(() => {
+          const scrollHeight = document.body.scrollHeight;
+          window.scrollBy(0, distance);
+          totalHeight += distance;
+
+          if (totalHeight >= scrollHeight - window.innerHeight || totalHeight > 3000) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 100);
+      });
+    });
+
+    // 6. Extracción
     const data = await page.evaluate(() => {
-      // Intentamos sacar la imagen del OpenGraph (meta tags) ya que bloqueamos la carga visual
+      // Selectores específicos de ML para la imagen (backup)
       const ogImage = document.querySelector('meta[property="og:image"]')?.content || 
-                      document.querySelector('meta[name="twitter:image"]')?.content;
+                      document.querySelector('img.ui-pdp-gallery__figure__image')?.src;
       
       const rawText = document.body.innerText;
 
       return {
         image: ogImage || null,
-        text: rawText.replace(/\s+/g, ' ').substring(0, 20000)
+        // Cortamos un poco menos para asegurar que entre la info técnica
+        text: rawText.replace(/\s+/g, ' ').substring(0, 25000)
       };
     });
 
@@ -60,7 +85,7 @@ async function scrapeUrl(url) {
 
   } catch (error) {
     console.error("❌ Error en Scraper:", error);
-    throw new Error(`Falló el scraping: ${error.message}`);
+    throw new Error(`Scraping fallido: ${error.message}`);
   } finally {
     await browser.close();
   }
