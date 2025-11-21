@@ -29,7 +29,8 @@ services:
     environment:
       - PORT=3000
       - DATABASE_URL=postgresql://terra_user:${DB_PASSWORD}@db:5432/terra_db
-      - GEMINI_API_KEY=${GEMINI_API_KEY} # La añadiremos luego
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ACCESS_CODE=${ACCESS_CODE}
     depends_on:
       db:
         condition: service_healthy
