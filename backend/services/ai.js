@@ -58,11 +58,16 @@ async function analyzeProperty(rawText, url) {
       ],
     });
 
-    const jsonText = response.text();
-    
-    if (!jsonText) {
-      throw new Error("Respuesta vacía de Gemini");
+    let jsonText = response.text;
+
+    // Fallback de seguridad: Si response.text viene vacío, buscamos en candidates
+    if (!jsonText && response.candidates && response.candidates.length > 0) {
+      jsonText = response.candidates[0].content.parts[0].text;
     }
+    
+    if (!jsonText) throw new Error("La IA no devolvió texto.");
+
+    jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
 
     return JSON.parse(jsonText);
   } catch (error) {
