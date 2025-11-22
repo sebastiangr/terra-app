@@ -56,7 +56,7 @@ app.post('/api/analyze', checkAuth, async (req, res) => {
     const scrapeData = await scrapeUrl(url);
     
     // Paso 2: IA
-    const aiAnalysis = await analyzeProperty(scrapeData.text, url);
+    const aiAnalysis = await analyzeProperty(scrapeData, url);
 
     // Combinar resultados para que el Front los muestre (sin guardar aún)
     const responseData = {

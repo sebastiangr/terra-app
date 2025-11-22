@@ -2,7 +2,7 @@ const { GoogleGenAI } = require("@google/genai");
 
 const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-async function analyzeProperty(rawText, url) {
+async function analyzeProperty(scrapeData, url) {
   
   const { text } = scrapeData;
 
