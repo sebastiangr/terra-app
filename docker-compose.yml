@@ -23,7 +23,7 @@ services:
   api:
     build: ./backend
     container_name: terra_api
-    restart: always
+    restart: always  
     ports:
       - "3500:3000" # Expuesto localmente para que Caddy lo vea
     environment:
@@ -34,6 +34,19 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - terra_net
+    # volumes:
+    #   - ./backend:/app             # Espejo: Carpeta backend -> Carpeta /app
+    #   - /app/node_modules          # Excepción: No sobrescribir node_modules internos con los de afuera     
+    # command: npm run dev          
+
+  web:
+    build: ./frontend
+    container_name: terra_web
+    restart: always
+    ports:
+      - "3550:80"
     networks:
       - terra_net
 
