@@ -1,5 +1,5 @@
 # backend/Dockerfile
-FROM node:18-alpine 
+FROM node:22-alpine 
 # Usamos Alpine que es super ligero
 
 WORKDIR /app
