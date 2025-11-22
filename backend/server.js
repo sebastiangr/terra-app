@@ -53,15 +53,15 @@ app.post('/api/analyze', checkAuth, async (req, res) => {
 
   try {
     // Paso 1: Scraper
-    const scrapData = await scrapeUrl(url);
+    const scrapeData = await scrapeUrl(url);
     
     // Paso 2: IA
-    const aiAnalysis = await analyzeProperty(scrapData.text, url);
+    const aiAnalysis = await analyzeProperty(scrapeData.text, url);
 
     // Combinar resultados para que el Front los muestre (sin guardar aún)
     const responseData = {
       original_url: url,
-      scraped_image: scrapData.image,
+      scraped_image: scrapeData.image,
       ...aiAnalysis
     };
 
