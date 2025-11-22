@@ -13,51 +13,59 @@ async function scrapeUrl(url) {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8'
         },
-        timeout: 10000 // 10 segundos máximo
+        timeout: 15000 // 10 segundos máximo
     });
 
     const $ = cheerio.load(data);
-    const metadata = {};
 
-    // 1. Extracción OpenGraph (Estándar en FB y ML)
-    metadata.title = $('meta[property="og:title"]').attr('content') || $('title').text();
-    metadata.description = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content');
-    metadata.image = $('meta[property="og:image"]').attr('content');
-    metadata.url = $('meta[property="og:url"]').attr('content') || url;
-    metadata.site_name = $('meta[property="og:site_name"]').attr('content');
+    // 1. Extracción Meta Tags (OpenGraph)
+    const metadata = {
+      title: $('meta[property="og:title"]').attr('content') || $('title').text(),
+      description: $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content'),
+      image: $('meta[property="og:image"]').attr('content'),
+      site_name: $('meta[property="og:site_name"]').attr('content')
+    };
 
-    // 2. Extracción JSON-LD (Clave para ML)
-    let jsonLdData = {};
+    // 2. Extracción JSON-LD (Especial para MercadoLibre)
     let jsonImage = null;
     let rawPrice = null;
     let currency = null;
+    let jsonDescription = '';
 
     $('script[type="application/ld+json"]').each((i, el) => {
       try {
-        const json = JSON.parse($(el).html());
+        const jsonStr = $(el).html();
+        if (!jsonStr) return;
+        
+        const json = JSON.parse(jsonStr);
         const items = Array.isArray(json) ? json : [json];
         
         for (const item of items) {
-          // Buscar Oferta/Producto
-          if (item['@type'] === 'Product' || item['@type'] === 'Offer' || item['offers']) {
-            jsonLdData = item;
+          // Buscamos objetos de Producto u Oferta
+          if (['Product', 'Offer', 'RealEstateListing'].includes(item['@type']) || item['offers']) {
             
-            // Intentar sacar imagen del JSON-LD (Suele ser mejor que OG)
+            // Imagen: A veces viene en 'image', 'image[0]' o dentro de 'offers'
             if (item.image) {
-              // A veces es un string, a veces un array
               jsonImage = Array.isArray(item.image) ? item.image[0] : item.image;
             }
 
+            // Descripción oculta en JSON
+            if (item.description) jsonDescription = item.description;
+
             // Precio
-            if (item.offers) {
-              const offer = Array.isArray(item.offers) ? item.offers[0] : item.offers;
+            const offer = item.offers ? (Array.isArray(item.offers) ? item.offers[0] : item.offers) : item;
+            if (offer && offer.price) {
               rawPrice = offer.price;
               currency = offer.priceCurrency;
             }
           }
         }
-      } catch (e) { }
+      } catch (e) { 
+      }
     });
+
+    // Definimos finalImage explícitamente
+    const finalImage = jsonImage || metadata.image || null;
 
     if (jsonLdData.offers) {
       const offer = Array.isArray(jsonLdData.offers) ? jsonLdData.offers[0] : jsonLdData.offers;
@@ -65,21 +73,21 @@ async function scrapeUrl(url) {
       currency = offer.priceCurrency;
     }
 
-
-    // Texto consolidado para IA
+    // Preparamos el texto para la IA
     const textForAI = `
     Título Original: ${metadata.title}
-    Descripción: ${metadata.description}
+    Descripción Meta: ${metadata.description}
+    Descripción JSON: ${jsonDescription}
     Sitio: ${metadata.site_name}
     Precio Metadata: ${rawPrice ? rawPrice + ' ' + currency : 'No detectado'}
-    Ubicación Metadata: ${jsonLdData.description || ''} (Buscar en descripción)
     `;
 
     return {
-      image: finalImage, // Devuelve la mejor imagen encontrada
+      image: finalImage, // Ahora sí está definida
       text: textForAI.trim(),
       rawMetadata: metadata
     };
+
 
   } catch (error) {
     console.error("❌ Error Axios/Cheerio:", error.message);
