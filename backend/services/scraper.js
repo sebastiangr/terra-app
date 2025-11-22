@@ -26,25 +26,38 @@ async function scrapeUrl(url) {
     metadata.url = $('meta[property="og:url"]').attr('content') || url;
     metadata.site_name = $('meta[property="og:site_name"]').attr('content');
 
-    // 2. Extracción JSON-LD (Muy común en MercadoLibre para precio)
-    // Buscamos scripts tipo application/ld+json
+    // 2. Extracción JSON-LD (Clave para ML)
     let jsonLdData = {};
+    let jsonImage = null;
+    let rawPrice = null;
+    let currency = null;
+
     $('script[type="application/ld+json"]').each((i, el) => {
       try {
         const json = JSON.parse($(el).html());
-        // A veces viene como array o como grafo
-        const item = Array.isArray(json) ? json[0] : json;
+        const items = Array.isArray(json) ? json : [json];
         
-        // Si encontramos algo que parece un producto u oferta
-        if (item['@type'] === 'Product' || item['@type'] === 'Offer' || item['offers']) {
-          jsonLdData = item;
-        }
-      } catch (e) { /* Ignorar JSON malformados */ }
-    });
+        for (const item of items) {
+          // Buscar Oferta/Producto
+          if (item['@type'] === 'Product' || item['@type'] === 'Offer' || item['offers']) {
+            jsonLdData = item;
+            
+            // Intentar sacar imagen del JSON-LD (Suele ser mejor que OG)
+            if (item.image) {
+              // A veces es un string, a veces un array
+              jsonImage = Array.isArray(item.image) ? item.image[0] : item.image;
+            }
 
-    // Intentar sacar precio del JSON-LD si existe
-    let rawPrice = null;
-    let currency = null;
+            // Precio
+            if (item.offers) {
+              const offer = Array.isArray(item.offers) ? item.offers[0] : item.offers;
+              rawPrice = offer.price;
+              currency = offer.priceCurrency;
+            }
+          }
+        }
+      } catch (e) { }
+    });
 
     if (jsonLdData.offers) {
       const offer = Array.isArray(jsonLdData.offers) ? jsonLdData.offers[0] : jsonLdData.offers;
@@ -52,19 +65,20 @@ async function scrapeUrl(url) {
       currency = offer.priceCurrency;
     }
 
-    // Consolidamos el texto para la IA
-    // Le damos título, descripción y precio si lo hallamos.
+
+    // Texto consolidado para IA
     const textForAI = `
-    Título: ${metadata.title}
+    Título Original: ${metadata.title}
     Descripción: ${metadata.description}
     Sitio: ${metadata.site_name}
-    Precio Detectado en Metadata: ${rawPrice ? rawPrice + ' ' + currency : 'No detectado explícitamente'}
+    Precio Metadata: ${rawPrice ? rawPrice + ' ' + currency : 'No detectado'}
+    Ubicación Metadata: ${jsonLdData.description || ''} (Buscar en descripción)
     `;
 
     return {
-      image: metadata.image || null,
+      image: finalImage, // Devuelve la mejor imagen encontrada
       text: textForAI.trim(),
-      rawMetadata: metadata // Para debug si quieres
+      rawMetadata: metadata
     };
 
   } catch (error) {

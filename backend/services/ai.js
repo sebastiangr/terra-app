@@ -18,6 +18,26 @@ async function analyzeProperty(scrapeData, url) {
 
   OBJETIVO: Pre-llenar un formulario.
   
+  INSTRUCCIONES DE EXTRACCIÓN Y LIMPIEZA:
+  
+  1. TÍTULO (IMPORTANTE): 
+    - Ignora el título original si es subjetivo.
+    - Genera un título NUEVO y OBJETIVO con el formato: "{Tipo de Inmueble} en {Ubicación}".
+    - EJEMPLO MALO: "Hermosa casa regalada gangazo en Guarne".
+    - EJEMPLO BUENO: "Casa Campestre en Guarne, Antioquia".
+    - Elimina adjetivos como: Hermosa, Espectacular, Barata, Oportunidad, Gangazo, Lujosa.
+
+  2. UBICACIÓN:
+    - Sé lo más específico posible (Municipio, Vereda, Barrio).
+
+  3. PRECIO:
+    - Si aparece en "Precio Metadata", úsalo.
+    - Si no, búscalo en la descripción.
+    - Si es confuso o dice "A convenir", pon null.
+
+  4. CARACTERÍSTICAS:
+    - Extrae habitaciones, baños, etc., solo si estás seguro.
+
   INSTRUCCIONES:
   1. Extrae lo que puedas confirmar (habitaciones, área, ubicación) del título o descripción.
   2. Si un dato no está explícito, DEJA NULL (no inventes).
@@ -26,12 +46,12 @@ async function analyzeProperty(scrapeData, url) {
 
   SCHEMA JSON:
   {
-      "title": "string",
-      "description": "string",
+      "title": "string (El título limpio)",
+      "description": "string (Resumen de max 150 caracteres)",
       "price": number | null,
       "currency": "string",
       "location": "string",
-      "type": "string",
+      "type": "string (Casa, Finca, Lote, Apartamento)",
       "features": {
           "bedrooms": number | null,
           "bathrooms": number | null,
