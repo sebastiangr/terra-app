@@ -40,7 +40,7 @@ pool.query('SELECT NOW()', (err, res) => {
 });
 
 // Rutas Básicas
-app.get('/', (req, res) => {
+app.get('/api', (req, res) => {
   res.json({ status: 'ok', message: 'Terra API is running 🚀' });
 });
 

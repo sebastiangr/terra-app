@@ -1,11 +1,24 @@
 <script setup>
   import { ref, onMounted } from 'vue';
+  import { Globe, Plus, Sun, Moon } from 'lucide-vue-next';
   import PropertyCard from './components/PropertyCard.vue';
   import AddPropertyModal from './components/AddPropertyModal.vue';
 
   const properties = ref([]);
   const showModal = ref(false);
   const isLoading = ref(true);
+
+  const theme = ref('cmyk'); // Default light
+
+  const toggleTheme = () => {
+    theme.value = theme.value === 'cmyk' ? 'dim' : 'cmyk';
+    applyTheme();
+  };
+
+  const applyTheme = () => {
+    document.documentElement.setAttribute('data-theme', theme.value);
+    localStorage.setItem('user-theme', theme.value);
+  };
 
   const fetchProperties = async () => {
     isLoading.value = true;
@@ -21,39 +34,49 @@
     }
   };
 
-  onMounted(fetchProperties);
+  
+  onMounted(() => {  
+    const savedTheme = localStorage.getItem('user-theme');
+    if (savedTheme) theme.value = savedTheme;
+    applyTheme();
+    
+    fetchProperties();
+  });
+
 
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col pb-10">
+  <div class="min-h-screen flex flex-col pb-10 transition-colors duration-300">
     
-    <!-- Navbar simple -->
-    <div class="navbar bg-base-100 shadow-sm px-4 md:px-8">
-      <div class="flex-1">
-        <a class="text-xl font-bold flex items-center gap-2 text-primary">
-          🌍 Terra <span class="badge badge-sm badge-ghost font-normal">MVP</span>
+    <!-- Navbar -->
+    <div class="navbar bg-base-100 shadow-sm px-4 md:px-8 sticky top-0 z-50 backdrop-blur-md bg-opacity-90">
+      <div class="w-full flex flex-row justify-between">
+        <a class="text-xl font-bold flex items-center gap-2 text-primary cursor-pointer hover:opacity-80" @click="fetchProperties">
+          <Globe class="w-6 h-6" /> <!-- Icono Lucide -->
+          Terra <span class="badge badge-xs badge-ghost font-normal">v0.0.2</span>
         </a>
       </div>
-      <div class="flex-none">
-        <button @click="showModal = true" class="btn btn-primary btn-sm md:btn-md gap-2">
+      <div class="flex flex-row gap-2 items-center">
+        <!-- Botón Agregar -->
+        <button @click="showModal = true" class="btn btn-primary btn-sm md:btn-md gap-2 shadow-md">
           <span class="hidden md:inline">Agregar Propiedad</span>
-          <span class="md:hidden">+</span>
+          <Plus class="w-5 h-5" /> <!-- Icono Lucide -->
         </button>
       </div>
     </div>
 
     <!-- Contenido Principal -->
-    <main class="container mx-auto px-4 mt-8 grow">
+    <main class="w-full mx-auto px-8 mt-8 grow">
       
-      <!-- Estado de Carga -->
+      <!-- Loading  -->
       <div v-if="isLoading" class="flex justify-center mt-20">
         <span class="loading loading-dots loading-lg text-primary"></span>
       </div>
 
-      <!-- VISTA 1: LISTADO (Dashboard) -->
-      <div v-else-if="properties.length > 0">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <!-- Dashboard  -->
+      <div v-else-if="properties.length > 0" class="animate-fade-in">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
           <PropertyCard 
             v-for="prop in properties" 
             :key="prop.id" 
@@ -62,22 +85,35 @@
         </div>
       </div>
 
-      <!-- VISTA 2: EMPTY STATE (Tu diseño original) -->
+      <!-- Empty State -->
       <div v-else class="flex flex-col items-center justify-center mt-10 md:mt-20 text-center animate-fade-in">
-        <div class="text-8xl mb-4 grayscale opacity-50">🌍</div>
+        <div class="mb-6 p-6 bg-base-300 rounded-full bg-opacity-30">
+           <Globe class="w-24 h-24 text-primary opacity-80" stroke-width="1" />
+        </div>
         <h1 class="text-4xl md:text-5xl font-bold text-base-content">Bienvenido a Terra</h1>
         <p class="py-6 text-lg text-base-content/60 max-w-md mx-auto">
-          No tienes propiedades guardadas aún.<br>
+          Tu portafolio inmobiliario inteligente.<br>
           Analiza tu primer enlace de MercadoLibre o Facebook.
         </p>
-        <button @click="showModal = true" class="btn btn-primary btn-lg shadow-xl hover:scale-105 transition-transform">
+        <button @click="showModal = true" class="btn btn-primary btn-lg shadow-xl hover:scale-105 transition-transform gap-3">
+          <Plus class="w-6 h-6" />
           Comenzar Análisis
         </button>
       </div>
 
     </main>
+    
+    <!-- Botón Toggle Tema -->
+    <div class="fixed bottom-0 left-0 z-10">
+      <div class="bg-base-100 shadow-md rounded-full mb-4 ml-4">
+        <button @click="toggleTheme" class="btn btn-circle btn-ghost hover:bg-base-content/10 text-base-content">
+          <Sun v-if="theme === 'cmyk'"/>
+          <Moon v-else />
+        </button>
+      </div>
+    </div>
 
-    <!-- Modal (Siempre disponible) -->
+    <!-- Modal -->
     <AddPropertyModal 
       v-if="showModal" 
       @close="showModal = false" 
@@ -86,32 +122,6 @@
 
   </div>
 </template>
-
-<!-- <template>
-  <div class="flex items-center justify-center h-screen w-full">
-    <div class="flex flex-col items-center justify-center max-w-md mx-auto">
-
-        <div class="text-6xl mb-4">🌍</div>
-        
-        <h1 class="text-5xl font-bold text-primary">Terra</h1>
-        <p class="py-6 text-lg text-base-content/80">
-          Tu gestor inteligente de propiedades. <br>
-          Analiza enlaces de MercadoLibre y Facebook con IA.
-        </p>
-        
-        <div class="flex flex-col gap-4 items-center justify-center">
-
-          <button class="btn btn-primary btn-lg shadow-lg">
-            Comenzar Análisis
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-          </button>
-          
-          <div class="badge badge-outline p-3">v1.0 MVP - Dockerized</div>
-        </div>
-
-    </div>
-  </div>
-</template> -->
 
 <style>
   .animate-fade-in {
